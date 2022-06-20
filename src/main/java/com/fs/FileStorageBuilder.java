@@ -58,20 +58,21 @@ public class FileStorageBuilder {
         }
 
         // 构建S3 Client
-        S3Client s3 = S3Client.builder()
+        S3Client s3Client = S3Client.builder()
                 .endpointOverride(endpointUri)
                 .credentialsProvider(() -> AwsBasicCredentials.create(properties.getAccessKey(), properties.getSecretKey()))
                 .region(Region.of(properties.getRegion()))
                 .build();
 
-        fileStorageClient = fileStorageClientMap.putIfAbsent(properties.getBucketName(), new FileStorageClient(s3));
+        fileStorageClient = fileStorageClientMap.putIfAbsent(properties.getBucketName(), new FileStorageClient(properties, s3Client));
 
         // 检查Bucket，如不存在则初始化Bucket
         try {
-            s3.headBucket(HeadBucketRequest.builder().bucket(properties.getBucketName()).build());
+            s3Client.headBucket(HeadBucketRequest.builder().bucket(properties.getBucketName()).build());
         } catch (NoSuchBucketException e) {
             LOG.info("Bucket [{}] not exist, create bucket.", properties.getBucketName());
-            CreateBucketResponse createBucketResponse = s3.createBucket(CreateBucketRequest.builder().bucket(properties.getBucketName()).build());
+            CreateBucketResponse createBucketResponse = s3Client
+                    .createBucket(CreateBucketRequest.builder().bucket(properties.getBucketName()).build());
             LOG.info("Bucket create success, response:{}", createBucketResponse.toString());
         }
 
