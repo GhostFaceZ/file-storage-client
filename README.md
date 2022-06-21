@@ -34,3 +34,7 @@
         // 将本地文件上传到对象存储中
         InputStream inputStream = new FileInputStream(new File("/User/Admin/File/test.jpg"));
         boolean putObjectResult = fileStorageClient.putObject("/demo/test.jpg", inputStream);
+
+###4 注意事项
+        1 首次构建 FileStorageClient 会自动初始化 Bukect，自动初始化的 Bucket 为[私读私写]
+        2 操作 Object 时需要提供 ObjectKey，由于S3 SDK约束，当 ObjectKey 以'/'开头，工具会自动删除开头的'/'

@@ -1,9 +1,9 @@
 package com.fs;
 
-import java.io.File;
-import java.io.FileInputStream;
+import cn.hutool.core.lang.Assert;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.net.URL;
 import java.time.Duration;
 import lombok.AllArgsConstructor;
@@ -37,7 +37,8 @@ import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequ
 public class FileStorageClient {
     private static final Logger LOG = LoggerFactory.getLogger(FileStorageClient.class);
 
-    private static final long OBJECT_SIGNATURE_DURATION = 24;
+    // Object临时URL保留时长，单位: 小时
+    private static final long OBJECT_SIGNATURE_DURATION = 1;
 
     private FileStorageInitProperties initProperties;
 
@@ -69,7 +70,10 @@ public class FileStorageClient {
      */
     public boolean doesObjectExist(String objectKey) {
         try {
-            s3Client.headObject(HeadObjectRequest.builder().key(objectKey).build());
+            s3Client.headObject(HeadObjectRequest.builder()
+                    .bucket(initProperties.getBucketName())
+                    .key(convertObjectKey(objectKey))
+                    .build());
         } catch (NoSuchKeyException e) {
             LOG.error("Object key [{}] not exist.", objectKey, e);
             return false;
@@ -86,7 +90,11 @@ public class FileStorageClient {
      */
     public boolean putObject(String objectKey, InputStream inputStream) {
         try {
-            s3Client.putObject(PutObjectRequest.builder().key(objectKey).build(), RequestBody.fromInputStream(inputStream, inputStream.available()));
+            s3Client.putObject(PutObjectRequest.builder()
+                            .bucket(initProperties.getBucketName())
+                            .key(convertObjectKey(objectKey))
+                            .build(),
+                    RequestBody.fromInputStream(inputStream, inputStream.available()));
         } catch (NoSuchKeyException | IOException e) {
             LOG.error("Put object key [{}] error.", objectKey, e);
             return false;
@@ -104,12 +112,19 @@ public class FileStorageClient {
     public URL generateObjectTmpUrl(String objectKey) {
         try {
             S3Presigner s3Presigner = S3Presigner.builder()
+                    .endpointOverride(new URI(initProperties.getEndpoint()))
                     .credentialsProvider(() -> AwsBasicCredentials.create(initProperties.getAccessKey(), initProperties.getSecretKey()))
                     .region(Region.of(initProperties.getRegion()))
                     .build();
+
+            GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                    .bucket(initProperties.getBucketName())
+                    .key(convertObjectKey(objectKey))
+                    .build();
+
             PresignedGetObjectRequest presignedGetObjectRequest = s3Presigner.presignGetObject(
                     GetObjectPresignRequest.builder()
-                            .getObjectRequest(GetObjectRequest.builder().key(objectKey).build())
+                            .getObjectRequest(getObjectRequest)
                             .signatureDuration(Duration.ofHours(OBJECT_SIGNATURE_DURATION))
                             .build());
             return presignedGetObjectRequest.url();
@@ -120,14 +135,17 @@ public class FileStorageClient {
     }
 
     /**
-     * 获取Object文件访问地址，限支持公共读的Bucket
+     * 获取Object文件访问地址, 注:限支持公共读的Bucket
      *
      * @param objectKey
      * @return
      */
     public URL getObjectUrl(String objectKey) {
         try {
-            URL url = s3Client.utilities().getUrl(GetUrlRequest.builder().key(objectKey).build());
+            URL url = s3Client.utilities().getUrl(GetUrlRequest.builder()
+                    .bucket(initProperties.getBucketName())
+                    .key(convertObjectKey(objectKey))
+                    .build());
             return url;
         } catch (Exception e) {
             LOG.error("Get object error, key:{}.", objectKey, e);
@@ -143,11 +161,23 @@ public class FileStorageClient {
      */
     public boolean deleteObject(String objectKey) {
         try {
-            s3Client.deleteObject(DeleteObjectRequest.builder().key(objectKey).build());
+            s3Client.deleteObject(DeleteObjectRequest.builder()
+                    .bucket(initProperties.getBucketName())
+                    .key(convertObjectKey(objectKey))
+                    .build());
             return true;
         } catch (Exception e) {
             LOG.error("Delete object error, key:{}.", objectKey, e);
             return false;
         }
+    }
+
+    /**
+     * 去除ObjectKey开头的'/'
+     */
+    private String convertObjectKey(String objectKey) {
+        Assert.notNull(objectKey, "Object key can't be null.");
+
+        return objectKey.startsWith("/") ? objectKey.substring(1) : objectKey;
     }
 }

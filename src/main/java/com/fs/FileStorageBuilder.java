@@ -50,9 +50,9 @@ public class FileStorageBuilder {
             throw e;
         }
 
+        // 初始化过相应Bucket的FileStorageClient直接返回
         FileStorageClient fileStorageClient = fileStorageClientMap.get(properties.getBucketName());
         if (fileStorageClient != null) {
-            // 初始化过相应Bucket的FileStorageClient直接返回
             LOG.info("Bucket [{}] had init file storage client, just return.", properties.getBucketName());
             return fileStorageClient;
         }
@@ -64,7 +64,9 @@ public class FileStorageBuilder {
                 .region(Region.of(properties.getRegion()))
                 .build();
 
-        fileStorageClient = fileStorageClientMap.putIfAbsent(properties.getBucketName(), new FileStorageClient(properties, s3Client));
+        // 构建FileStorageClient
+        fileStorageClient = new FileStorageClient(properties, s3Client);
+        fileStorageClientMap.putIfAbsent(properties.getBucketName(), fileStorageClient);
 
         // 检查Bucket，如不存在则初始化Bucket
         try {
